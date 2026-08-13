@@ -299,13 +299,13 @@ if ( ! defined( 'ABSPATH' ) ) { exit; }
         <tr class="rv">
           <td class="h-name">Lead-generation platforms</td>
           <td class="h-desc">Purpose-built sites that connect qualified buyers with vetted local and national partners.</td>
-          <td class="h-num" data-count="9">0</td>
+          <td class="h-num" data-count="12">0</td>
           <td class="h-status"><span class="pill">Operating</span></td>
         </tr>
         <tr class="rv">
           <td class="h-name">Premium domains</td>
           <td class="h-desc">A curated portfolio of category-defining names, held and developed selectively.</td>
-          <td class="h-num" data-count="500">0<small>+</small></td>
+          <td class="h-num" data-count="430">0<small>+</small></td>
           <td class="h-status"><span class="pill">Held</span></td>
         </tr>
         <tr class="rv">
