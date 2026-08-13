@@ -2,8 +2,10 @@
 /**
  * Obundance Design child theme.
  * - Front page is a fully custom template (front-page.php).
- * - Provisions the site on first activation (pages, options, cleanup).
- * - Registers the obn/v1 REST namespace: contact form endpoint + one-time boot endpoint.
+ * - Provisions the site on activation (pages, options, cleanup). v2 also publishes
+ *   the WordPress default draft Privacy Policy page (the v1 hook found the draft
+ *   via get_page_by_path and wrongly skipped it, leaving /privacy-policy/ a 404).
+ * - Registers the obn/v1 REST namespace: contact form endpoint.
  */
 
 if ( ! defined( 'ABSPATH' ) ) { exit; }
@@ -21,9 +23,9 @@ add_action( 'wp_head', function () {
 	echo '<style>p:has(a[href*="kadencewp.com"]){display:none !important;}</style>';
 }, 99 );
 
-/* ---------- provisioning: runs once on activation ---------- */
-add_action( 'after_switch_theme', function () {
-	if ( get_option( 'obn_provisioned' ) ) { return; }
+/* ---------- provisioning: idempotent, re-runs until version marker matches ---------- */
+add_action( 'init', function () {
+	if ( 'v2' === get_option( 'obn_provisioned_version' ) ) { return; }
 	try {
 		// Permalinks
 		update_option( 'permalink_structure', '/%postname%/' );
@@ -42,7 +44,7 @@ add_action( 'after_switch_theme', function () {
 		$p1 = get_post( 1 ); if ( $p1 && 'post' === $p1->post_type ) { wp_delete_post( 1, true ); }
 		$p2 = get_post( 2 ); if ( $p2 && 'page' === $p2->post_type ) { wp_delete_post( 2, true ); }
 
-		// Home page (front-page.php renders it, but a real page keeps WP tidy)
+		// Home page
 		$home_id = 0;
 		$existing = get_page_by_path( 'home' );
 		if ( $existing ) { $home_id = $existing->ID; }
@@ -56,10 +58,23 @@ add_action( 'after_switch_theme', function () {
 				'post_author'  => 1,
 			) );
 		}
-		// Privacy page
+		// Privacy page: get_page_by_path also returns the WP default DRAFT page,
+		// so publish-or-create rather than skip when found.
+		$privacy_html = '<h2>Privacy Policy</h2><p>Effective date: August 13, 2026</p><p>Obundance LLC ("Obundance," "we," "us") operates obundance.com. This page describes what we collect and how we use it.</p><h3>What we collect</h3><p>If you use our contact form, we receive the name, email address, and message you submit. Our web host also keeps standard server logs (IP address, browser type, pages requested) for security and troubleshooting.</p><h3>How we use it</h3><p>We use contact form submissions solely to respond to your inquiry. We do not sell or rent personal information. We do not send marketing email from this site.</p><h3>Cookies and analytics</h3><p>This site does not set advertising cookies. If we add basic analytics, it will be used only to understand aggregate site usage.</p><h3>Third parties</h3><p>Our properties may link to partner sites. Their privacy practices are their own; review their policies when you visit them.</p><h3>Contact</h3><p>Questions about this policy? Reach us through the contact form on our homepage. Mailing address: Obundance LLC, 1621 Central Ave #59518, Cheyenne, WY 82001.</p>';
 		$priv = get_page_by_path( 'privacy-policy' );
 		if ( ! $priv ) {
-			$privacy_html = '<h2>Privacy Policy</h2><p>Effective date: August 13, 2026</p><p>Obundance LLC ("Obundance," "we," "us") operates obundance.com. This page describes what we collect and how we use it.</p><h3>What we collect</h3><p>If you use our contact form, we receive the name, email address, and message you submit. Our web host also keeps standard server logs (IP address, browser type, pages requested) for security and troubleshooting.</p><h3>How we use it</h3><p>We use contact form submissions solely to respond to your inquiry. We do not sell or rent personal information. We do not send marketing email from this site.</p><h3>Cookies and analytics</h3><p>This site does not set advertising cookies. If we add basic analytics, it will be used only to understand aggregate site usage.</p><h3>Third parties</h3><p>Our properties may link to partner sites. Their privacy practices are their own; review their policies when you visit them.</p><h3>Contact</h3><p>Questions about this policy? Reach us through the contact form on our homepage. Mailing address: Obundance LLC, 1621 Central Ave #59518, Cheyenne, WY 82001.</p>';
+			$found = get_posts( array( 'post_type' => 'page', 'post_status' => array( 'publish', 'draft', 'pending' ), 'title' => 'Privacy Policy', 'numberposts' => 1 ) );
+			$priv  = $found ? $found[0] : null;
+		}
+		if ( $priv ) {
+			wp_update_post( array(
+				'ID'           => $priv->ID,
+				'post_status'  => 'publish',
+				'post_name'    => 'privacy-policy',
+				'post_content' => $privacy_html,
+			) );
+			$priv_id = $priv->ID;
+		} else {
 			$priv_id = wp_insert_post( array(
 				'post_title'   => 'Privacy Policy',
 				'post_name'    => 'privacy-policy',
@@ -68,9 +83,9 @@ add_action( 'after_switch_theme', function () {
 				'post_content' => $privacy_html,
 				'post_author'  => 1,
 			) );
-			if ( $priv_id && ! is_wp_error( $priv_id ) ) {
-				update_option( 'wp_page_for_privacy_policy', $priv_id );
-			}
+		}
+		if ( $priv_id && ! is_wp_error( $priv_id ) ) {
+			update_option( 'wp_page_for_privacy_policy', $priv_id );
 		}
 		if ( $home_id && ! is_wp_error( $home_id ) ) {
 			update_option( 'show_on_front', 'page' );
@@ -83,11 +98,12 @@ add_action( 'after_switch_theme', function () {
 		// Flush permalinks
 		if ( function_exists( 'flush_rewrite_rules' ) ) { flush_rewrite_rules(); }
 
+		update_option( 'obn_provisioned_version', 'v2' );
 		update_option( 'obn_provisioned', gmdate( 'c' ) );
 	} catch ( \Throwable $e ) {
 		update_option( 'obn_provision_error', $e->getMessage() );
 	}
-} );
+}, 20 );
 
 /* ---------- REST: contact form ---------- */
 add_action( 'rest_api_init', function () {
